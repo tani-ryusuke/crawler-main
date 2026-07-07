@@ -40,20 +40,20 @@ static void led_update_timer_callback(void* arg) {
     // 次の周期の判定のために受信フラグを偽に戻す
     data_received_flag = false;
 
-    // 通信成功率を0.0から1.0の範囲で算出して色を滑らかに合成する
+    // 通信成功率を0.0から1.0の範囲で算出して色を滑らかに合成
     float ratio = (float)success_count / HISTORY_WEIGHT;
     uint32_t red   = (uint32_t)(255 * (1.0 - ratio)); // 成功率が低いほど赤色が強くなる
     uint32_t green = (uint32_t)(255 * ratio);       // 成功率が高いほど緑色が強くなる
     uint32_t blue  = 0;
 
-    // 計算した色をLEDに反映させる
+    // 計算した色をLEDに反映
     led_strip_set_pixel(led_strip, 0, red, green, blue);
     led_strip_refresh(led_strip);
 }
 
 // LEDの初期設定を行う関数
 void led_init(void) {
-    // LEDの接続ピンや種類などを設定する
+    // LEDの接続ピンや種類などを設定
     led_strip_config_t strip_config = {
         .strip_gpio_num = LED_GPIO_PIN,
         .max_leds = MAX_LEDS,
@@ -61,13 +61,13 @@ void led_init(void) {
         .led_model = LED_MODEL_WS2812,
         .flags.invert_out = false,
     };
-    // 通信制御用の周辺機器の設定を行う
+    // 通信制御用の周辺機器の設定
     led_strip_rmt_config_t rmt_config = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = 10 * 1000 * 1000, 
         .flags.with_dma = false,
     };
-    // 設定を反映させてLEDデバイスを作成し初期化として一度消灯させる
+    // 設定を反映させてLEDデバイスを作成し初期化として一度消灯
     ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
     led_strip_clear(led_strip); 
 }
@@ -76,18 +76,18 @@ void led_init(void) {
 void on_data_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
     controller_data_t received_data;
     
-    // 受信したバイナリデータのサイズが想定通りであれば構造体に中身をコピーする
+    // 受信したバイナリデータのサイズが想定通りであれば構造体に中身をコピー
     if (len == sizeof(controller_data_t)) {
         memcpy(&received_data, data, sizeof(received_data));
 
-        last_rssi = info->rx_ctrl->rssi; // 電波強度を保存する
-        last_packet_time = esp_timer_get_time(); // 現在のシステム時間をマイクロ秒単位で取得して保存する
+        last_rssi = info->rx_ctrl->rssi; // 電波強度を保存
+        last_packet_time = esp_timer_get_time(); // 現在のシステム時間をマイクロ秒単位で取得して保存
 
-        data_received_flag = true; // データが正常に届いたことを示すフラグを真にする
+        data_received_flag = true; // データが正常に届いたことを示すフラグを真に
 
-        uint32_t rf = 0, rr = 0, lf = 0, lr = 0; // 4チャンネル分のモーター出力を格納する変数を初期化する
+        uint32_t rf = 0, rr = 0, lf = 0, lr = 0; // 4チャンネル分のモーター出力を格納する変数を初期化
 
-        // コントローラーから届いたレバーの方向を示す数値に応じて各モーターの出力を決定する
+        // コントローラーから届いたレバーの方向を示す数値に応じて各モーターの出力を決定
         switch (received_data.dir) {
             case 8: rf = 1023; rr = 0;    lf = 1023; lr = 0;    break; // 前進の処理
             case 2: rf = 0;    rr = 1023; lf = 0;    lr = 1023; break; // 後進の処理
@@ -101,33 +101,33 @@ void on_data_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
             default: rf = 0;   rr = 0;    lf = 0;    lr = 0;    break; // 停止の処理
         }
 
-        // リモコンのボタンゼロが押されたときに停止モードを切り替えるトグル処理
-        uint32_t current_time = xTaskGetTickCount() * portTICK_PERIOD_MS; // 現在のシステム時間をミリ秒単位で取得する
+        // コントローラのボタンゼロが押されたときに停止モードを切り替えるトグル処理
+        uint32_t current_time = xTaskGetTickCount() * portTICK_PERIOD_MS; // 現在のシステム時間をミリ秒単位で取得
 
-        // ボタンの押しっぱなしによる連続動作を防ぐため前回の切り替えから300ミリ秒以内は処理を無視する
+        // ボタンの押しっぱなしによる連続動作を防ぐため前回の切り替えから300ミリ秒以内は処理を無視
         if (current_time - last_toggle_time > 300) {
             
-            // 前回はボタンが離されていて今回は押されている瞬間であるかを判定する
+            // 前回はボタンが離されていて今回は押されている瞬間であるかを判定
             if (received_data.btn[0] == 1 && last_btn0_state == 0) {
                 
                 toggle_emergency_stop_mode(); // モーター制御ファイル側の緊急停止切り替え関数を呼び出す
                 
-                last_toggle_time = current_time; // 切り替えた時間を更新してここから300ミリ秒のロックを開始する
+                last_toggle_time = current_time; // 切り替えた時間を更新してここから300ミリ秒のロックを開始
             }
             
-            last_btn0_state = received_data.btn[0]; // 現在のボタンの状態を次回の比較用に保存する
+            last_btn0_state = received_data.btn[0]; // 現在のボタンの状態を次回の比較用に保存
         }
 
-        // 開発環境の画面に計算された各モーターの出力値を表示する
+        // 開発環境の画面に計算された各モーターの出力値を表示
         printf("DEBUG: PWM Output -> RF:%d, RR:%d, LF:%d, LR:%d\n", (int)rf, (int)rr, (int)lf, (int)lr);
 
         // 決定した値を直接出力するのではなく目標値として設定し実際の滑らかな加減速は別ループに任せる
         set_target_crawler_drive_4ch(rf, rr, lf, lr);
 
-        // 受信したレバーの方向の数値を画面に出力する
+        // 受信したレバーの方向の数値を画面に出力
         printf("Direction: %d | Buttons: ", received_data.dir);
 
-        // リモコンにある8個のボタンの状態を順番に画面に出力する
+        // コントローラにある8個のボタンの状態を順番に画面に出力
         for (int i = 0; i < 8; i++) {
             printf("[%d]", received_data.btn[i]);
         }
@@ -139,16 +139,16 @@ void on_data_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 
 // 通信機能および周辺機能全体の初期化を行う関数
 void wifi_now_init(void) {
-    // データの保存領域であるフラッシュメモリを初期化する
+    // データの保存領域であるフラッシュメモリを初期化
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
-    // エラーが起きていないか確認する
+    // エラーが起きていないか確認
     ESP_ERROR_CHECK(ret);
 
-    // ネットワーク基盤を初期化しワイファイを子機モードで起動する
+    // ネットワーク基盤を初期化しWi-Fiを子機モードで起動
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -156,22 +156,22 @@ void wifi_now_init(void) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    // 機器間通信であるイーエスピーナウを初期化する
+    // 機器間通信であるESP-NOWを初期化する
     ESP_ERROR_CHECK(esp_now_init());
     
-    // データを受信したときに動作する関数を登録する
+    // データを受信したときに動作する関数を登録
     ESP_ERROR_CHECK(esp_now_register_recv_cb(on_data_recv));
 
-    // ステータスを表示するためのLEDの初期化を行う
+    // ステータスを表示するためのLEDの初期化
     led_init();
 
-    // 20ミリ秒ごとにLEDの色更新関数を呼び出すための定期タイマーを作成して開始する
+    // 20ミリ秒ごとにLEDの色更新関数を呼び出すための定期タイマーを作成して開始
     const esp_timer_create_args_t timer_args = {
         .callback = &led_update_timer_callback,
         .name = "led_update_timer"
     };
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &led_update_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(led_update_timer, 20000)); // 20000マイクロ秒は20ミリ秒を意味する
+    ESP_ERROR_CHECK(esp_timer_start_periodic(led_update_timer, 20000)); // 20000マイクロ秒
 
     ESP_LOGI(TAG, "受信待機中（LEDステータス監視有効）...");
 }
